@@ -51,7 +51,7 @@ node scripts/sync-installed.mjs   # 把工作区同步到 harness 实际加载�
 
 然后重启 web profile 生效。详见下文「改动后部署」。
 
-> 不要把安装位置换成 junction/symlink：Node 对链接做 realpath 解析，插件内部 `@deepseek-ai/*` 依赖会从真实路径（工作区，无依赖树）解析失败。详见 `docs/pitfalls.md`「Junction 陷阱」。
+> 不要把安装位置换成 junction/symlink：Node 对链接做 realpath 解析，插件内部 `@deepseek-ai/*` 依赖会从真实路径（工作区，无依赖树）解析失败（见上文「踩坑速查」）。
 
 ## 使用
 
