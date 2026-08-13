@@ -29,35 +29,29 @@
 
 要求：DSH `>= 0.1.0-rc.6`（web profile）、git。
 
-### 方式 A：作为 bundle 安装（推荐）
+### 方式 A：从 GitHub 直接安装（推荐）
+
+本插件是纯 JS（无 TypeScript 构建步骤），git 安装开箱即用：
 
 ```sh
-# 1. 把插件装进 web profile 的依赖（pnpm 支持 npm 包名 / git URL / 本地路径）
-dsh plugin --profile web add delivery-review-plugin
-
-# 2. 编辑 $DSH_HOME/profiles/web/package.json，把包名加进 dsh.profile.bundles 列表：
-#    "dsh": { "profile": { "bundles": [ ..., "delivery-review-plugin" ] } }
+dsh plugin --profile web add github:xiaoxiao-svg/delivery-review-dsh-plugin
 ```
 
-重新启动 web profile 即生效（bundle patch 位于 base bundle 之后）。之后可按 id 在 profile 的 `cordis.patch.yml` 里覆盖任意行。
+该命令把插件装进 profile 依赖（pnpm 拉取源码），并因包声明了 `dsh.bundle` 自动追加进 `dsh.profile.bundles`——**无需手动编辑任何配置文件**。重启 web profile 即生效（bundle patch 位于 base bundle 之后），之后可按 id 在 profile 的 `cordis.patch.yml` 里覆盖任意行。
 
-### 方式 B：本地开发调试（对应 `claude --plugin-dir`）
+> 若后续发布到 npm 注册表，也可用包名安装：`dsh plugin --profile web add delivery-review-plugin`。
+
+### 方式 B：本地开发调试（作者/贡献者）
+
+改代码 → 同步 → 重启，三步循环：
 
 ```sh
-# 先让插件可被 Node 解析：pnpm 添加本地路径依赖
-dsh plugin --profile web add "file:D:/桌面文件/3.uTools/deepseek-harness-plugin"
-
-# 再在 profile 的 cordis.patch.yml（或 --patch overlay）里手动 insert 各插件行，
-# name 用绝对路径或 file:// URL（Windows 推荐 file://），例如：
-# - insert:
-#     - id: delivery-review-command
-#       name: 'file:///D:/桌面文件/3.uTools/deepseek-harness-plugin/src/command.js'
-#     - id: delivery-review-hook
-#       name: 'file:///D:/桌面文件/3.uTools/deepseek-harness-plugin/src/hook.js'
-#     ...（其余行同 cordis.patch.yml）
+node scripts/sync-installed.mjs   # 把工作区同步到 harness 实际加载的安装位置
 ```
 
-> 本地开发时也可以直接 `dsh web --patch ./cordis.patch.yml`，但 patch 内 name 是裸说明符 `delivery-review-plugin/src/...`，需先完成上一步的依赖安装才能解析。
+然后重启 web profile 生效。详见下文「改动后部署」。
+
+> 不要把安装位置换成 junction/symlink：Node 对链接做 realpath 解析，插件内部 `@deepseek-ai/*` 依赖会从真实路径（工作区，无依赖树）解析失败。详见 `docs/pitfalls.md`「Junction 陷阱」。
 
 ## 使用
 
@@ -99,16 +93,18 @@ node scripts/sync-installed.mjs   # 同步到安装位置，然后重启 web pro
 
 > 不要把安装位置换成 junction/symlink（Node realpath 会导致插件依赖解析失败），详见 `docs/pitfalls.md`。
 
-## 踩坑记录
+## 踩坑速查
 
-运行中踩过的坑（content 块形状 / skills.register source / junction 陷阱等）统一记录在 [`docs/pitfalls.md`](docs/pitfalls.md)，排障前先翻一遍。
+- 注入消息 content 必须是块数组（`[{ type: "text", text }]`）：裸字符串会触发误导性的 `DeepSeek API stream ... failed`（TRANSPORT）报错，GUI 显示为大量"未知内容块"
+- 安装位置不要用 junction/symlink 链接：Node realpath 后插件依赖从真实路径解析会失败；改代码用 `node scripts/sync-installed.mjs` 同步后重启
+- `ctx.skills.register` 必须带 `source` 字符串（如 `"bundled"`），否则加载技能时报 `source must be a string`
 
 ## 已知限制
 
 - 审查材料只覆盖 write/edit/pwsh/bash（与 Claude 版 matcher 一致）；MCP 等其他工具的写入不在材料中，由审查者列入未知清单
 - 三个 subagent 工具全局注册（所有 agent 可见），与 Claude 插件全局提供 agent 类型一致
 - reviewer/planner 采用 allow 只读白名单，比 Claude 版"禁写但其余工具可用"更严格（审查者本来也只用读类工具）
-- 本仓库已通过本地安装测试（bundle 组合 + web 启动加载，见 `docs/porting-notes.md` 第五节），但未跑通需要 LLM 凭据的端到端 loop
+- 本仓库已通过本地安装测试与端到端 loop 实测（2026-08-14，含命令注入 → 子代理往返 → 状态机全链路）
 
 ## 许可
 
