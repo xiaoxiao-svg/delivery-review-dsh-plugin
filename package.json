@@ -1,0 +1,37 @@
+{
+  "name": "delivery-review-plugin",
+  "version": "1.0.0",
+  "description": "双 Agent 交付协作工作流（loop 模式）的 DeepSeek Harness 移植版：/delivery-review 命令 + 审查材料自动生成 + fixer/reviewer/planner 隔离子代理。基于 DSH 原生子代理消息通道（不使用 git notes）。",
+  "type": "module",
+  "license": "MIT",
+  "author": "xiaoxiao-svg",
+  "homepage": "https://github.com/xiaoxiao-svg/delivery-review-plugin",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/xiaoxiao-svg/delivery-review-plugin.git"
+  },
+  "files": [
+    "cordis.patch.yml",
+    "src/",
+    "workflow/",
+    "roles/",
+    "skills/"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    }
+  },
+  "peerDependencies": {
+    "@deepseek-ai/dsh-llm": ">=0.1.0-rc.0",
+    "@deepseek-ai/dsh-tools": ">=0.1.0-rc.0"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/dsh-llm": {
+      "optional": true
+    },
+    "@deepseek-ai/dsh-tools": {
+      "optional": true
+    }
+  }
+}

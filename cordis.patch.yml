@@ -1,0 +1,68 @@
+# delivery-review bundle patch —— 以 insert 方式挂载本插件的全部插件行。
+#
+# 作为 bundle（package.json 的 dsh.bundle.patch）安装后，本文件在 profile 组合中
+# 位于 base bundle（@deepseek-ai/dsh-base）之后；上层（profile 的 cordis.patch.yml
+# 或 --patch overlay）可按 id 覆盖或禁用这些行。
+#
+# 挂载顺序无加载语义（激活由服务依赖驱动），分组仅为可读性。
+
+- insert:
+    # /delivery-review 命令：注入编排指令并唤醒主 agent（编排者）
+    - id: delivery-review-command
+      name: 'delivery-review-plugin/src/command.js'
+
+    # 审查材料自动刷新：监听 tools/post-execute，write/edit/pwsh/bash 后刷新材料
+    # （对应 Claude 版 plugin.json 的 PostToolUse hook，matcher: Write|Edit|Bash）
+    - id: delivery-review-hook
+      name: 'delivery-review-plugin/src/hook.js'
+
+    # 手动兜底刷新工具：编排者在每轮审查前主动刷新材料（双保险）
+    - id: delivery-review-refresh
+      name: 'delivery-review-plugin/src/refresh.js'
+
+    # 角色指令工具：spawn 子代理前取 fixer/reviewer/planner 角色文本
+    # （绕过 fs 沙箱对插件目录的访问限制，且可按需拉取、抗上下文压缩）
+    - id: delivery-review-roles
+      name: 'delivery-review-plugin/src/roles.js'
+
+    # 方法论技能：随插件注册进 ctx.skills，安装即用
+    - id: delivery-review-skills
+      name: 'delivery-review-plugin/src/skills.js'
+
+    # ── 三个角色子代理工具行（复用 @deepseek-ai/dsh-tool-subagent）──────────
+
+    # 修复工程师：读写权限（不配 toolFilter = 继承全局工具集）
+    - id: delivery-review-subagent-fixer
+      name: '@deepseek-ai/dsh-tool-subagent'
+      config:
+        provider: spawn
+        toolName: subagent_fixer
+
+    # 资深审查者：工具层强制只读（对应 Claude 版 agent 定义 disallowedTools:
+    # [Write, Edit, Bash]）。用 allow 白名单而非 deny 黑名单：只保留只读工具
+    # （read/read_image/glob/grep），这些工具在所有平台都注册，且不依赖 !!js
+    # 平台表达式（rc.6 实测 loader 不会对插件 config 内的表达式节点求值）。
+    - id: delivery-review-subagent-reviewer
+      name: '@deepseek-ai/dsh-tool-subagent'
+      config:
+        provider: spawn
+        toolName: subagent_reviewer
+        toolFilter:
+          allow:
+            - read
+            - read_image
+            - glob
+            - grep
+
+    # 方案审查者（按需触发）：同样只读白名单
+    - id: delivery-review-subagent-planner
+      name: '@deepseek-ai/dsh-tool-subagent'
+      config:
+        provider: spawn
+        toolName: subagent_planner
+        toolFilter:
+          allow:
+            - read
+            - read_image
+            - glob
+            - grep
