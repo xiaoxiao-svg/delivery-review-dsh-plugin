@@ -5,10 +5,10 @@
   "type": "module",
   "license": "MIT",
   "author": "xiaoxiao-svg",
-  "homepage": "https://github.com/xiaoxiao-svg/delivery-review-plugin",
+  "homepage": "https://github.com/xiaoxiao-svg/delivery-review-dsh-plugin",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/xiaoxiao-svg/delivery-review-plugin.git"
+    "url": "git+https://github.com/xiaoxiao-svg/delivery-review-dsh-plugin.git"
   },
   "files": [
     "cordis.patch.yml",
