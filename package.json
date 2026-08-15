@@ -1,7 +1,7 @@
 {
   "name": "delivery-review-plugin",
-  "version": "1.0.0",
-  "description": "双 Agent 交付协作工作流（loop 模式）的 DeepSeek Harness 移植版：/delivery-review 命令 + 审查材料自动生成 + fixer/reviewer/planner 隔离子代理。基于 DSH 原生子代理消息通道（不使用 git notes）。",
+  "version": "2.0.0",
+  "description": "DSH 专属双 Agent 交付协作插件：/dsh-delivery 命令 + 确定性状态机（JS 纯函数）+ 结构化审查结论（schema 校验）+ Web 活动面板（状态路由+浮层）+ 按任务规模自动分级。基于 DSH 原生能力（ask_user_question / toolFilter 只读隔离 / webServer 路由 / skills 注册），不使用 git notes、不由 LLM 手写状态。",
   "type": "module",
   "license": "MIT",
   "author": "xiaoxiao-svg",
@@ -13,6 +13,7 @@
   "files": [
     "cordis.patch.yml",
     "src/",
+    "web/",
     "workflow/",
     "roles/",
     "skills/"

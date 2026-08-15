@@ -1,18 +1,23 @@
-# delivery-review bundle patch —— 以 insert 方式挂载本插件的全部插件行。
+# dsh-delivery bundle patch —— 以 insert 方式挂载本插件的全部插件行。
 #
 # 作为 bundle（package.json 的 dsh.bundle.patch）安装后，本文件在 profile 组合中
 # 位于 base bundle（@deepseek-ai/dsh-base）之后；上层（profile 的 cordis.patch.yml
 # 或 --patch overlay）可按 id 覆盖或禁用这些行。
 #
-# 挂载顺序无加载语义（激活由服务依赖驱动），分组仅为可读性。
+# 架构说明（DSH 专属版，区别于移植版）：
+#   - 状态机下沉为确定性代码：src/state.js（纯函数）+ src/store.js（持久化），
+#     编排者经 delivery_status 读状态、reviewer 经 delivery_submit_review 提交结论，
+#     不再由 LLM 手写 state.json
+#   - Web 活动面板：src/panel.js 注册状态路由 + 注入浮层脚本（免构建）
 
 - insert:
-    # /delivery-review 命令：注入编排指令并唤醒主 agent（编排者）
+    # /dsh-delivery 命令：注入决策指引并唤醒主 agent（编排者），
+    # 启动时自动做任务分级探测（light/standard/heavy）
     - id: delivery-review-command
       name: 'delivery-review-plugin/src/command.js'
 
     # 审查材料自动刷新：监听 tools/post-execute，write/edit/pwsh/bash 后刷新材料
-    # （对应 Claude 版 plugin.json 的 PostToolUse hook，matcher: Write|Edit|Bash）
+    # （串行队列收敛在 material.js 模块级，修复 R1-4 竞态）
     - id: delivery-review-hook
       name: 'delivery-review-plugin/src/hook.js'
 
@@ -21,13 +26,24 @@
       name: 'delivery-review-plugin/src/refresh.js'
 
     # 角色指令工具：spawn 子代理前取 fixer/reviewer/planner 角色文本
-    # （绕过 fs 沙箱对插件目录的访问限制，且可按需拉取、抗上下文压缩）
     - id: delivery-review-roles
       name: 'delivery-review-plugin/src/roles.js'
 
     # 方法论技能：随插件注册进 ctx.skills，安装即用
     - id: delivery-review-skills
       name: 'delivery-review-plugin/src/skills.js'
+
+    # 结构化结论提交工具 delivery_submit_review：reviewer 结论经 schema
+    # 强校验直接进状态机（不再自由文本解析）+ 轮次记录落盘。
+    # 确定性状态机（src/state.js）与状态存储（src/store.js）是纯库模块，
+    # 由 submit/panel/command 直接 import，无需单独挂载行。
+    - id: delivery-review-submit
+      name: 'delivery-review-plugin/src/submit.js'
+
+    # Web 活动面板：/plugins/delivery-review/state 路由 + 浮层注入 +
+    # delivery_status 状态查询工具
+    - id: delivery-review-panel
+      name: 'delivery-review-plugin/src/panel.js'
 
     # ── 三个角色子代理工具行（复用 @deepseek-ai/dsh-tool-subagent）──────────
 
@@ -38,10 +54,9 @@
         provider: spawn
         toolName: subagent_fixer
 
-    # 资深审查者：工具层强制只读（对应 Claude 版 agent 定义 disallowedTools:
-    # [Write, Edit, Bash]）。用 allow 白名单而非 deny 黑名单：只保留只读工具
-    # （read/read_image/glob/grep），这些工具在所有平台都注册，且不依赖 !!js
-    # 平台表达式（rc.6 实测 loader 不会对插件 config 内的表达式节点求值）。
+    # 资深审查者：工具层强制只读（allow 白名单 read/read_image/glob/grep）
+    # + delivery_submit_review 提交工具（唯一写通道，只写 .delivery-review/ 状态）。
+    # 全平台工具名，无平台差异。
     - id: delivery-review-subagent-reviewer
       name: '@deepseek-ai/dsh-tool-subagent'
       config:
@@ -53,8 +68,9 @@
             - read_image
             - glob
             - grep
+            - delivery_submit_review
 
-    # 方案审查者（按需触发）：同样只读白名单
+    # 方案审查者（heavy 级按需触发）：同样只读白名单
     - id: delivery-review-subagent-planner
       name: '@deepseek-ai/dsh-tool-subagent'
       config:

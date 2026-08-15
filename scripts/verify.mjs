@@ -1,5 +1,5 @@
-// 静态校验：语法检查所有 src/*.js、解析 cordis.patch.yml（含 !!js 表达式节点）、
-// 校验角色/技能/工作流文件存在且 frontmatter 可解析。
+// 静态校验：语法检查所有 src/*.js 与 web/*.js、解析 cordis.patch.yml、
+// 校验角色/技能/工作流文件存在且 frontmatter 可解析、检查状态机与提交工具模块导出。
 // 用法：node scripts/verify.mjs [--modules <node_modules 目录>]
 // js-yaml 从 DSH 安装树的 node_modules 解析（env DSH_NODE_MODULES 或默认 npx 缓存路径）。
 
@@ -29,14 +29,20 @@ const fail = (message) => {
 const ok = (message) => console.log(`✓ ${message}`);
 
 // ── 1. JS 语法 ──────────────────────────────────────────────────────────────
-const srcFiles = ["material.js", "hook.js", "refresh.js", "roles.js", "command.js", "skills.js"];
+const srcFiles = ["material.js", "hook.js", "refresh.js", "roles.js", "command.js", "skills.js", "state.js", "store.js", "submit.js", "panel.js"];
 for (const file of srcFiles) {
   const path = join(ROOT, "src", file);
   const check = spawnSync(process.execPath, ["--check", path], { encoding: "utf8" });
-  if (check.status === 0) ok(`语法 ${file}`);
+  if (check.status === 0) ok(`语法 src/${file}`);
   else {
-    fail(`语法 ${file}\n${check.stderr}`);
+    fail(`语法 src/${file}\n${check.stderr}`);
   }
+}
+{
+  const path = join(ROOT, "web", "floater.js");
+  const check = spawnSync(process.execPath, ["--check", path], { encoding: "utf8" });
+  if (check.status === 0) ok("语法 web/floater.js");
+  else fail(`语法 web/floater.js\n${check.stderr}`);
 }
 
 // ── 2. cordis.patch.yml ─────────────────────────────────────────────────────
@@ -68,6 +74,8 @@ if (!Array.isArray(insert) || insert.length === 0) {
     "delivery-review-refresh",
     "delivery-review-roles",
     "delivery-review-skills",
+    "delivery-review-submit",
+    "delivery-review-panel",
     "delivery-review-subagent-fixer",
     "delivery-review-subagent-reviewer",
     "delivery-review-subagent-planner"
@@ -76,11 +84,18 @@ if (!Array.isArray(insert) || insert.length === 0) {
     if (byId.has(id) && typeof byId.get(id).name === "string") ok(`行 ${id}`);
     else fail(`行 ${id} 缺失或 name 非法`);
   }
-  for (const row of ["delivery-review-subagent-reviewer", "delivery-review-subagent-planner"]) {
-    const allow = byId.get(row)?.config?.toolFilter?.allow;
-    if (!Array.isArray(allow) || allow.length !== 4) fail(`${row} toolFilter.allow 应为 4 项只读工具（read/read_image/glob/grep）`);
-    else ok(`${row} toolFilter.allow = ${allow.join(", ")}`);
+  // reviewer/planner 只读白名单检查；reviewer 额外允许 delivery_submit_review
+  const reviewerAllow = byId.get("delivery-review-subagent-reviewer")?.config?.toolFilter?.allow;
+  if (!Array.isArray(reviewerAllow)) fail("reviewer toolFilter.allow 缺失");
+  else {
+    const expectedAllow = ["read", "read_image", "glob", "grep", "delivery_submit_review"];
+    if (reviewerAllow.length !== expectedAllow.length || !expectedAllow.every((t) => reviewerAllow.includes(t))) {
+      fail(`reviewer toolFilter.allow 应为 [${expectedAllow.join(", ")}]`);
+    } else ok(`reviewer toolFilter.allow = ${reviewerAllow.join(", ")}`);
   }
+  const plannerAllow = byId.get("delivery-review-subagent-planner")?.config?.toolFilter?.allow;
+  if (!Array.isArray(plannerAllow) || plannerAllow.length !== 4) fail("planner toolFilter.allow 应为 4 项只读工具");
+  else ok(`planner toolFilter.allow = ${plannerAllow.join(", ")}`);
 }
 
 // ── 3. 资源文件存在性 ──────────────────────────────────────────────────────
@@ -89,7 +104,8 @@ for (const rel of [
   "roles/fixer.md",
   "roles/reviewer.md",
   "roles/planner.md",
-  "skills/delivery-review/SKILL.md"
+  "skills/delivery-review/SKILL.md",
+  "web/floater.js"
 ]) {
   const path = join(ROOT, rel);
   if (existsSync(path)) ok(`资源 ${rel}`);
@@ -101,7 +117,24 @@ const fm = /^---\r?\n([\s\S]*?)\r?\n---/.exec(skillText);
 if (!fm || !/^name:\s*\S+$/m.test(fm[1]) || !/^description:\s*\S+/m.test(fm[1])) {
   fail("SKILL.md frontmatter 应含单行 name/description");
 } else {
-  ok("SKILL.md frontmatter（name/description 单行）");
+  ok(`SKILL.md frontmatter（name=${fm[1].match(/^name:\s*(\S+)/m)[1]}）`);
+}
+
+// ── 4. 核心模块导出完整性（import 即检查） ────────────────────────────────
+const checks = [
+  ["state.js", ["initialState", "advance", "normalizeState", "riskFingerprint", "EXIT_REASONS"]],
+  ["store.js", ["resolveRepoRoot", "readState", "writeState", "appendRound", "readRounds", "withLock"]],
+  ["material.js", ["refreshReviewMaterial", "listChangedFiles", "listChangedFileFingerprints", "MUTATING_TOOLS", "setLastActiveRepo", "getLastActiveRepo"]]
+];
+for (const [file, names] of checks) {
+  try {
+    const mod = await import(`file://${join(ROOT, "src", file).replaceAll("\\", "/")}`);
+    const missing = names.filter((n) => typeof mod[n] === "undefined");
+    if (missing.length === 0) ok(`模块导出 ${file}（${names.join("/")}）`);
+    else fail(`模块导出 ${file} 缺失: ${missing.join(", ")}`);
+  } catch (error) {
+    fail(`模块导入 ${file}: ${error.message}`);
+  }
 }
 
 console.log(failures === 0 ? "\n全部通过 ✅" : `\n${failures} 项失败 ❌`);

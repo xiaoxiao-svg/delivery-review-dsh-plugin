@@ -10,7 +10,7 @@
 // docs/porting-notes.md 第五节与 docs/pitfalls.md「Junction 陷阱」）。
 //
 // 用法：node scripts/sync-installed.mjs [--profile web]
-//   同步范围 = package.json 的 files 字段（cordis.patch.yml、src/、workflow/、
+//   同步范围 = package.json 的 files 字段（cordis.patch.yml、src/、web/、workflow/、
 //   roles/、skills/）加 package.json 本身。同步后重启 web profile 生效。
 import { cpSync, existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
